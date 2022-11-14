@@ -63,6 +63,10 @@
   },
   "license": "MIT",
   "dependencies": {
-    "@typechain/hardhat": "^2.3.0"
+    "@depay/walletconnect": "^2.0.0",
+    "@typechain/hardhat": "^2.3.0",
+    "@unlock-protocol/hardhat-plugin": "^0.0.18",
+    "depay-web3-blockchains": "^2.6.0",
+    "depay-web3-wallets": "^5.7.3"
   }
 }

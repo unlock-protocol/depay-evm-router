@@ -18,11 +18,7 @@ contract DePayRouterV1ApproveAndCallContractAmountsAddressesAddressesAddressesBy
   // Prepare unlock purchase via struct
   // to save local variable slots
   struct UnlockPurchase {
-    uint256[] _values;
-    address[] _recipients;
-    address[] _referrers;
-    address[] _keyManagers;
-    bytes[] _data;
+    bytes _calldata;
   }
   
   // Call another smart contract to deposit an amount for a given address while making sure the amount passed to the contract is approved.
@@ -35,6 +31,9 @@ contract DePayRouterV1ApproveAndCallContractAmountsAddressesAddressesAddressesBy
   // passing the address at index 0 of addresses (addresses[0])
   // and passing the amount at index 1 of amounts (amounts[1])
   // to the method with the signature provided in data at index 0 (data[0]).
+  
+  // data[0] is the method signature
+  // data[1] is the encoded call data
   function execute(
     address[] calldata path,
     uint[] calldata amounts,
@@ -55,42 +54,21 @@ contract DePayRouterV1ApproveAndCallContractAmountsAddressesAddressesAddressesBy
     {
       UnlockPurchase memory purchase;
       {
-        purchase._values = new uint[](1);
-        purchase._values[0] = amounts[1];
-        purchase._recipients = new address[](1);
-        purchase._recipients[0] = addresses[2];
-        purchase._referrers = new address[](1);
-        purchase._referrers[0] = addresses[2];
-        purchase._keyManagers = new address[](1);
-        purchase._keyManagers[0] = addresses[2];
+        purchase._calldata = abi.encodePacked(data[1]);
       }
 
       if(path[path.length-1] == NATIVE) {
         // Make sure to send the NATIVE along with the call in case of sending NATIVE.
         {
           (bool success, bytes memory returnData) = addresses[1].call{value: amounts[1]}(
-            abi.encodeWithSignature(
-              data[0],
-              purchase._values,
-              purchase._recipients,
-              purchase._referrers,
-              purchase._keyManagers,
-              purchase._data
-            )
+            purchase._calldata
           );
           Helper.verifyCallResult(success, returnData, "Calling smart contract payment receiver failed!");
         }
       } else {
         {
           (bool success, bytes memory returnData) = addresses[1].call(
-            abi.encodeWithSignature(
-              data[0],
-              purchase._values,
-              purchase._recipients,
-              purchase._referrers,
-              purchase._keyManagers,
-              purchase._data
-            )
+            purchase._calldata
           );
           Helper.verifyCallResult(success, returnData, "Calling smart contract payment receiver failed!");
         }
