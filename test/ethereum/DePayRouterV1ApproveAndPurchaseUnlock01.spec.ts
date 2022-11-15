@@ -157,7 +157,7 @@ describe(`DePayRouterV1ApproveAndCallContractAmountsAddressesAddressesAddressesB
       })
   
       it('swaps DAI to ETH and performs payment into smart contract with ETH', async () => {
-        let amountOut = ethers.utils.parseUnits('0.001', 18)
+        let amountOut = keyPrice
         let exchangeRouter = await ethers.getContractAt(IUniswapV2Router02.abi, exchange.contracts.router.address)
         let amountsIn = await exchangeRouter.getAmountsIn(amountOut, [DAI, CONSTANTS[blockchain].WRAPPED])
         let amountIn = amountsIn[0].toString()
@@ -174,7 +174,7 @@ describe(`DePayRouterV1ApproveAndCallContractAmountsAddressesAddressesAddressesB
           [swapPlugin.address, contractCallPlugin.address],
           // data
           [sig, calldata]
-          )
+        )
       })
   
       it.skip('swaps ETH to DAI and performs payment into smart contract with DAI', async () => {

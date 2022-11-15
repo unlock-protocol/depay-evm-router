@@ -24,14 +24,6 @@ contract DePayRouterV1ApproveAndCallContractAmountsAddressesAddressesAddressesBy
     bytes _calldata;
   }
 
-  struct UnlockPurchase {
-    uint256[1] _values;
-    address[1] _recipients;
-    address[1] _referrers;
-    address[1] _managers;
-    bytes[1] _data;
-  }
-  
   // Call another smart contract to deposit an amount for a given address while making sure the amount passed to the contract is approved.
   //
   // Approves the amount at index 1 of amounts (amounts[1])
@@ -61,9 +53,6 @@ contract DePayRouterV1ApproveAndCallContractAmountsAddressesAddressesAddressesBy
       );
     }
 
-    console.log('sig', data[0]);
-    console.log('calldata', data[1]);
-
     // Call the smart contract which is receiver of the payment.
     {
       UnlockCall memory purchase;
@@ -71,15 +60,10 @@ contract DePayRouterV1ApproveAndCallContractAmountsAddressesAddressesAddressesBy
         purchase._sig = data[0];
         purchase._calldata = bytes(data[1]);
         purchase._lockAddress = addresses[0];
-        purchase._amount = amounts[0];
+        purchase._amount = amounts[1];
       }
 
       // decode
-      // console.log('sig', purchase._sig);
-      // console.log('calldata', string(purchase._calldata));
-      console.log('contract address', purchase._lockAddress);
-      console.log('value', purchase._amount);
-      
       if(path[path.length-1] == NATIVE) {
         console.log('native');
         // Make sure to send the NATIVE along with the call in case of sending NATIVE.
