@@ -17,8 +17,19 @@ contract DePayRouterV1ApproveAndCallContractAmountsAddressesAddressesAddressesBy
 
   // Prepare unlock purchase via struct
   // to save local variable slots
-  struct UnlockPurchase {
+  struct UnlockCall {
+    address _lockAddress;
+    uint _amount;
+    string _sig;
     bytes _calldata;
+  }
+
+  struct UnlockPurchase {
+    uint256[1] _values;
+    address[1] _recipients;
+    address[1] _referrers;
+    address[1] _managers;
+    bytes[1] _data;
   }
   
   // Call another smart contract to deposit an amount for a given address while making sure the amount passed to the contract is approved.
@@ -50,17 +61,48 @@ contract DePayRouterV1ApproveAndCallContractAmountsAddressesAddressesAddressesBy
       );
     }
 
+    console.log('sig', data[0]);
+    console.log('calldata', data[1]);
+
+    // UnlockPurchase memory toEncode = UnlockPurchase(
+    //     [ uint(100000000000000000) ],
+    //     [ 0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc ],
+    //     [ 0x0000000000000000000000000000000000000000 ],
+    //     [ 0x0000000000000000000000000000000000000000 ],
+    //     [ bytes('') ]
+    // );
+    
+    // console.log('encoded', toEncode);
+
+    // UnlockPurchase memory decoded = abi.decode(
+    //   bytes(data[1])[4:],
+    //   (UnlockPurchase)
+    // );
+
+    // console.log('haha');
+    // console.log(decoded._recipients[0]);
+
+
     // Call the smart contract which is receiver of the payment.
     {
-      UnlockPurchase memory purchase;
+      UnlockCall memory purchase;
       {
-        purchase._calldata = abi.encodePacked(data[1]);
+        purchase._sig = data[0];
+        purchase._calldata = bytes(data[1]);
+        purchase._lockAddress = addresses[0];
+        purchase._amount = amounts[1];
       }
 
+      // decode
+      // console.log('sig', purchase._sig);
+      // console.log('calldata', string(purchase._calldata));
+      // console.log('contract address', purchase._lockAddress);
+      // console.log('value', purchase._amount);
+      
       if(path[path.length-1] == NATIVE) {
         // Make sure to send the NATIVE along with the call in case of sending NATIVE.
         {
-          (bool success, bytes memory returnData) = addresses[1].call{value: amounts[1]}(
+          (bool success, bytes memory returnData) = purchase._lockAddress.call{value: purchase._amount}(
             purchase._calldata
           );
           Helper.verifyCallResult(success, returnData, "Calling smart contract payment receiver failed!");

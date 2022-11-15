@@ -4,19 +4,18 @@ import deployTestToken from '../helpers/deploy/testToken'
 import impersonate from '../helpers/impersonate'
 import IUniswapV2Router02 from '../../artifacts/contracts/interfaces/IUniswapV2Router02.sol/IUniswapV2Router02.json'
 import now from '../helpers/now'
-import { CONSTANTS, ZERO } from 'depay-web3-constants'
+import { CONSTANTS } from 'depay-web3-constants'
 import { ethers, unlock } from 'hardhat'
 import { expect } from 'chai'
 import { findByName } from 'depay-web3-exchanges'
 import { Token } from 'depay-web3-tokens'
 
 const blockchain = 'ethereum'
-const FormatTypes = ethers.utils.FormatTypes;
   
 // get unlock address in mainnet
 const { networks : { 1 : { unlockAddress }} } = unlock
 const keyPrice = ethers.utils.parseUnits('0.1', 'ether')
-const ADDRESS_ZERO = '0x0000000000000000000000000000000000000000'
+const ZERO = '0x0000000000000000000000000000000000000000'
 export const lockParams = {
   expirationDuration: 60 * 60 * 24 * 30, // 30 days
   keyPrice, // in wei
@@ -34,29 +33,50 @@ describe(`DePayRouterV1ApproveAndCallContractAmountsAddressesAddressesAddressesB
       lock,
       lockInterface,
       unlockContract,
-      purchaseSignature,
-      extendSignature,
-      keyOwner
+      keyOwner,
+      signer,
+      dai
 
   let exchange = findByName('uniswap_v2')
   let DAI = '0x6B175474E89094C44Da98b954EedeAC495271d0F'
   let addressWithDAI = '0x075e72a5eDf65F0A5f44699c7654C1a76941Ddc8'
   
+  const getSig = (abi, func) => Object.keys(abi.functions).find(name => name.includes(func))
   
   before(async ()=>{
     wallets = await ethers.getSigners()
     keyOwner = wallets[5].address
+
     // parse contracts from chain
     unlockContract = await unlock.getUnlockContract(unlockAddress)
-    ;({lock} = await unlock.createLock({ unlockAddress, ...lockParams }))
-    
+    ;({lock} = await unlock.createLock({ 
+      unlockAddress, 
+      currencyContractAddress: DAI,
+      ...lockParams 
+    }))
+
+    // make sure we can add multiple keys
+    // await lock.setMaxKeysPerAddress(5)
+
     // get signatures
     ;({ interface: lockInterface } = lock )
-    purchaseSignature = lockInterface.format(FormatTypes.full).find(d => d.includes('purchase'))
-    extendSignature = lockInterface.format(FormatTypes.full).find(d => d.includes('extend'))
-    console.log(purchaseSignature, extendSignature)
+
+    // prepare dai
+    await impersonate(addressWithDAI)
+    signer = await ethers.getSigner(addressWithDAI)
+    dai = await ethers.getContractAt('TestToken', DAI)
+    dai.connect(signer).approve(lock.address, keyPrice.mul(100))
   })
   
+  it('lock is set properly', async () => {
+    expect(await lock.tokenAddress()).to.equal(DAI)
+  })
+
+  it('signer has enough DAI to buy a bunch of keys', async () => {
+    expect(await dai.balanceOf(signer.address)).to.be.gte(keyPrice.mul(5))
+    expect(await dai.allowance(signer.address, lock.address)).to.be.gte(keyPrice.mul(5))
+  })
+
   it('requires the router', async () => {
     configuration = await deployConfiguration()
     router = await deployRouter(configuration.address)
@@ -89,20 +109,37 @@ describe(`DePayRouterV1ApproveAndCallContractAmountsAddressesAddressesAddressesB
   })
 
   describe('purchase', () => {
-    let calldata
-    const isErc20 = false
+    let calldata, sig, args
+
     beforeEach(async () => {
-      calldata = await lockInterface.encodeFunctionData(
-        purchaseSignature,
-        [
-          isErc20 ? [keyPrice] : [], // values
+      sig = getSig(lockInterface, 'purchase')
+      console.log(keyPrice.toString())
+      sig = ethers.utils.id(sig).substring(0, 10)
+      args = [
+          [keyPrice], // keyPrices
           [keyOwner], // recipients
-          [ADDRESS_ZERO], // referrers
-          [ADDRESS_ZERO], // key managers
-          [[]], // _data
-        ]
+          [ZERO],
+          [ZERO],
+          ['0x'], // _data
+      ]
+      
+      console.log(args)
+      calldata = await lockInterface.encodeFunctionData(sig, args)
+    })
+
+    it.skip('calldata is encoded properly', async () => {
+      const decoded = lockInterface.decodeFunctionData(sig, calldata)
+      expect(lockInterface.decodeFunctionData(sig, calldata)).to.deep.equal(
+        decoded.slice(0, args.length)
       )
-      console.log(calldata)
+    })
+
+    it.skip('calldata actually works', async () => {
+      await signer.sendTransaction({
+        to: lock.address,
+        data: calldata,
+      })
+      expect(await lock.balanceOf(keyOwner)).to.equal(1)
     })
 
     it('swaps DAI to ETH and performs payment into smart contract with ETH', async () => {
@@ -111,7 +148,6 @@ describe(`DePayRouterV1ApproveAndCallContractAmountsAddressesAddressesAddressesB
       let amountsIn = await exchangeRouter.getAmountsIn(amountOut, [DAI, CONSTANTS[blockchain].WRAPPED])
       let amountIn = amountsIn[0].toString()
       let DAIToken = await ethers.getContractAt(Token[blockchain].DEFAULT, DAI)
-      const signer = await impersonate(addressWithDAI)
       await DAIToken.connect(signer).approve(router.address, CONSTANTS[blockchain].MAXINT)
       await router.connect(signer).route(
         // path
@@ -119,20 +155,19 @@ describe(`DePayRouterV1ApproveAndCallContractAmountsAddressesAddressesAddressesB
         // amounts
         [amountIn, amountOut, now()+60000, 0, 0, amountOut],
         // addresses
-        [addressWithDAI, lock.address, addressWithDAI, '0x0000000000000000000000000000000000000000', '0x0000000000000000000000000000000000000000'],
+        [lock.address],
         // plugins
         [swapPlugin.address, contractCallPlugin.address],
         // data
-        [purchaseSignature, calldata]
+        [sig, calldata]
         )
     })
 
-    it('swaps ETH to DAI and performs payment into smart contract with DAI', async () => {
+    it.skip('swaps ETH to DAI and performs payment into smart contract with DAI', async () => {
       let amountOut = ethers.utils.parseUnits('1', 18)
       let exchangeRouter = await ethers.getContractAt(IUniswapV2Router02.abi, exchange.contracts.router.address)
       let amountsIn = await exchangeRouter.getAmountsIn(amountOut, [CONSTANTS[blockchain].WRAPPED, DAI])
       let amountIn = amountsIn[0].toString()
-      const signer = await impersonate(addressWithDAI)
       await router.connect(signer).route(
         // path
         [CONSTANTS[blockchain].NATIVE, DAI],
