@@ -7,6 +7,8 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import './libraries/Helper.sol';
 import "hardhat/console.sol";
 
+import './test/ITestUnlock.sol';
+
 contract DePayRouterV1ApproveAndCallContractAmountsAddressesAddressesAddressesBytes {
 
   // Address representating NATIVE currency
@@ -24,6 +26,14 @@ contract DePayRouterV1ApproveAndCallContractAmountsAddressesAddressesAddressesBy
     bytes _calldata;
   }
 
+  struct UnlockPurchase {
+    uint256[] _values;
+    address[] _recipients;
+    address[] _referrers;
+    address[] _managers;
+    bytes[] _data;
+  }
+
   // Call another smart contract to deposit an amount for a given address while making sure the amount passed to the contract is approved.
   //
   // Approves the amount at index 1 of amounts (amounts[1])
@@ -35,6 +45,18 @@ contract DePayRouterV1ApproveAndCallContractAmountsAddressesAddressesAddressesBy
   // and passing the amount at index 1 of amounts (amounts[1])
   // to the method with the signature provided in data at index 0 (data[0]).
   
+  function getSig(bytes memory _data) 
+        private 
+        pure 
+        returns(
+            bytes4 sig
+        ) 
+    {
+        assembly {
+            sig := mload(add(_data, 32))
+        }
+    }
+
   // data[0] is the method signature
   // data[1] is the encoded call data
   function execute(
@@ -62,15 +84,59 @@ contract DePayRouterV1ApproveAndCallContractAmountsAddressesAddressesAddressesBy
         purchase._lockAddress = addresses[0];
         purchase._amount = amounts[1];
       }
+      // console.log(data[1]);
+      // console.log('purchase._lockAddress', purchase._lockAddress);
+      // console.log('purchase._sig', purchase._sig);
+      // console.log('purchase._calldata', string(purchase._calldata));
+      // console.log('purchase._amount', purchase._amount);
+      // console.log('amountIn', amounts[0]);
+
+      // require(getSig(abi.encode(data[1])) == 0x33818997, 'wrong abi.encode getSig');
+      // require(getSig((bytes(data[1]))) == 0x33818997, 'wrong bytes getSig');
+      // require(getSig(purchase._calldata) == 0x33818997, 'wrong getSig');
+      // require(bytes4(bytes(data[1])[4:]) == 0x33818997, 'wrong bytes(data[1])[4:]');
+
+      // (address[] memory hello,,,,) = abi.decode(
+      //   bytes(data[1])[4:], 
+      //   (address[], uint[], address[], string[], bytes[]));
+      // // console.log('sig', string(abi.encodePacked(sig)));
+      // console.log('hello[0]', hello[0]);
+      
+      // console.log(recipient);
 
       // decode
       if(path[path.length-1] == NATIVE) {
         console.log('native');
         // Make sure to send the NATIVE along with the call in case of sending NATIVE.
         {
-          (bool success, bytes memory returnData) = purchase._lockAddress.call{value: purchase._amount}(
-            purchase._calldata
+          console.log('purchase._calldata', string(purchase._calldata));
+          ITestUnlock(purchase._lockAddress).hello();
+
+          ITestUnlock(purchase._lockAddress).purchase(
+            [uint(0)],
+            [address(0)],
+            [address(0)], 
+            [address(0)],
+            [bytes('')]
           );
+
+          bytes memory calldata2 = abi.encodeWithSignature(
+            "purchase(uint256[1],address[1],address[1],address[1],bytes[1])", 
+            [uint(0)],[address(0)],[address(0)], [address(0)],[bytes('')]
+          );
+
+          console.logBytes(bytes(data[1])); // ethers encodeFunctionData
+          console.logBytes(calldata2);
+
+          //   bytes4(keccak256()), );
+
+          (bool success, bytes memory returnData) = purchase._lockAddress.call(
+            // calldata2
+            bytes(data[1])
+            // purchase._calldata
+            // abi.encodeWithSignature(purchase._sig, purchase._calldata[:4])
+          );
+          console.log(success, string(abi.encodePacked(returnData)));
           Helper.verifyCallResult(success, returnData, "Calling smart contract payment receiver failed!");
         }
       } else {

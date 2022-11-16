@@ -13,11 +13,11 @@ contract TestUnlock  {
   );
 
   function purchase(
-    uint256[] memory _values,
-    address[] memory _recipients,
-    address[] memory _referrers,
-    address[] memory _keyManagers,
-    bytes[] memory _data
+    uint256[1] memory _values,
+    address[1] memory _recipients,
+    address[1] memory _referrers,
+    address[1] memory _keyManagers,
+    bytes[1] memory _data
   ) external payable returns (uint) {
     console.log("CALL");
     console.log(_values.length);
@@ -28,5 +28,9 @@ contract TestUnlock  {
 
     emit UnlockEvent(_recipients[0]);
     return(_values[0]);
+  }
+
+  function hello() public  {
+    console.log('hello');
   }
 }

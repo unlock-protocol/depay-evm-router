@@ -40,11 +40,12 @@ describe(`DePayRouterV1ApproveAndCallContractAmountsAddressesAddressesAddressesB
   let DAI = '0x6B175474E89094C44Da98b954EedeAC495271d0F'
   let addressWithDAI = '0x075e72a5eDf65F0A5f44699c7654C1a76941Ddc8'
   
-  const getSig = (abi, func) => 
-    ethers.utils.id(
-      Object.keys(abi.functions).find(name => name.includes(func))
-    )
-    .substring(0, 10)
+  const getSig = (abi, func) => {
+    console.log(Object.keys(abi.functions).find(name => name.includes(func)))
+    // return ethers.utils.id(
+      return Object.keys(abi.functions).find(name => name.includes(func))
+    // ).substring(0, 10)
+  }
   
   before(async ()=>{
     wallets = await ethers.getSigners()
@@ -96,7 +97,7 @@ describe(`DePayRouterV1ApproveAndCallContractAmountsAddressesAddressesAddressesB
       // await lock.setMaxKeysPerAddress(5)
     })
     
-    it('lock is set properly', async () => {
+    it('lock is set properly', async () => {  
       expect(await lock.tokenAddress()).to.equal(ZERO)
       expect(await lock.name()).to.equal(lockParams.name)
       expect(await lock.expirationDuration()).to.equal(lockParams.expirationDuration)
@@ -107,25 +108,48 @@ describe(`DePayRouterV1ApproveAndCallContractAmountsAddressesAddressesAddressesB
     })
 
     describe('purchase', () => {
-      let calldata, sig, args
+      let calldata, sig, args, mock
   
       beforeEach(async () => {
-        sig = getSig(lock.interface, 'purchase')
+
+        const Mock = await ethers.getContractFactory('TestUnlock')
+        mock = await Mock.deploy()
+
+        sig = getSig(mock.interface, 'purchase')
         args = [
-            [keyPrice], // keyPrices
-            [keyOwner], // recipients
+            [0], // keyPrices
+            [ZERO], // recipients
             [ZERO],
             [ZERO],
-            ['0x'], // _data
+            [[]], // _data
         ]
-        calldata = await lock.interface.encodeFunctionData(sig, args)
+
+        
+        calldata = ethers.utils.defaultAbiCoder.encode([ 
+          "uint256[1]",
+          "address[1]",
+          "address[1]",
+          "address[1]",
+          "bytes[1]"
+          
+        ], args)
+        // calldata = await mock.interface.encodeFunctionData(sig, args)
+        calldata = Buffer.from((ethers.utils.arrayify(calldata).buffer)).toString()
+        // calldata = String.fromCharCode.apply(null, ethers.utils.arrayify(calldata))
+        // calldata = new TextDecoder().decode(ethers.utils.arrayify(calldata));
 
         // prepare dai signer
         await impersonate(addressWithDAI)
         signer = await ethers.getSigner(addressWithDAI)
+        
+        console.log('lock', lock.address)
+        console.log('mock', mock.address)
+        console.log('keyPrice', keyPrice.toString())
+        console.log(calldata)
+        await mock.hello()
       })
   
-      it('calldata is encoded properly', async () => {
+      it.skip('calldata is encoded properly', async () => {
         const decoded = lock.interface.decodeFunctionData(sig, calldata)
         expect(lock.interface.decodeFunctionData(sig, calldata)).to.deep.equal(
           decoded.slice(0, args.length)
@@ -146,7 +170,30 @@ describe(`DePayRouterV1ApproveAndCallContractAmountsAddressesAddressesAddressesB
           [[]], 
         )
       })
+
       
+      it.skip('mock call  works', async () => {
+        const tx = await mock.purchase(...args)
+        const { events } = await tx.wait()
+        const evt = events.find(({event}) => event === 'UnlockEvent')
+        expect(evt.args.recipient).to.equal(keyOwner)
+        
+        // mock 
+        const res = await signer.sendTransaction({
+          to: mock.address,
+          data: calldata,
+          value : keyPrice
+        })
+        const { logs } = await res.wait()
+        expect(logs[0].topics).to.deep.equal(evt.topics)
+      })
+
+      it.skip('mock and lock have identical signatures', async () => {
+        expect(getSig(lock.interface, 'purchase')).to.equal(
+          getSig(mock.interface, 'purchase')
+        )
+      })
+
       it.skip('calldata actually works', async () => {
         await signer.sendTransaction({
           to: lock.address,
@@ -169,7 +216,8 @@ describe(`DePayRouterV1ApproveAndCallContractAmountsAddressesAddressesAddressesB
           // amounts
           [amountIn, amountOut, now()+60000, 0, 0, amountOut],
           // addresses
-          [lock.address],
+          [mock.address],
+          // [lock.address],
           // plugins
           [swapPlugin.address, contractCallPlugin.address],
           // data
@@ -217,6 +265,7 @@ describe(`DePayRouterV1ApproveAndCallContractAmountsAddressesAddressesAddressesB
       // make sure we can add multiple keys
       // await lock.setMaxKeysPerAddress(5)
     })
+
     it('lock token is set properly', async () => {
       expect(await lock.tokenAddress()).to.equal(DAI)
     })
